@@ -1,9 +1,16 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+	"github.com/julienschmidt/httprouter"
+)
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	router := httprouter.New()
+
+	router.GET("/", func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
 		w.Write([]byte("Success!"))
 	})
+
+	http.ListenAndServe(":8080", router)
 }
