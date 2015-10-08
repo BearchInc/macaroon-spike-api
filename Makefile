@@ -8,7 +8,7 @@ vm:
 build:
 	docker build -t approvald .
 
-run: vm build
+run: rm-all vm build
 	docker run --publish 6060:8080 --name approval-service --detach approvald
 
 stop-all:
