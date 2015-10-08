@@ -3,19 +3,13 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"github.com/bearchinc/macaroon-spike-api/models"
 	"github.com/julienschmidt/httprouter"
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2"
 	"log"
 	"net/http"
 )
-
-type Deployment struct {
-	Status      string
-	UserID      string
-	Commit      string
-	ApproversID []string
-}
 
 func main() {
 	router := httprouter.New()
@@ -26,10 +20,10 @@ func main() {
 		userParams := struct{ UserID, Commit string }{}
 		json.NewDecoder(req.Body).Decode(&userParams)
 
-		err := db.Save("deployments", &Deployment{
+		err := db.Save("deployments", &models.Deployment{
 			UserID: userParams.UserID,
 			Commit: userParams.Commit,
-			Status: "pending",
+			Status: models.DeploymentPending,
 		})
 
 		if err != nil {
