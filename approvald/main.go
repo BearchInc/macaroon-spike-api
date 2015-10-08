@@ -1,28 +1,40 @@
 package main
 
 import (
-	"net/http"
+	"encoding/base64"
+	"encoding/json"
 	"github.com/julienschmidt/httprouter"
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2"
-	"encoding/base64"
 	"log"
-	"encoding/json"
+	"net/http"
 )
+
+type Deployment struct {
+	Status      string
+	UserID      string
+	Commit      string
+	ApproversID []string
+}
 
 func main() {
 	router := httprouter.New()
-
-	session, err := mgo.Dial("localhost")
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
+	db := NewDB()
+	defer db.Close()
 
 	router.POST("/deployments", func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		userParams := struct { UserID, Commit string } {}
+		userParams := struct{ UserID, Commit string }{}
 		json.NewDecoder(req.Body).Decode(&userParams)
-		
+
+		err := db.Save("deployments", &Deployment{
+			UserID: userParams.UserID,
+			Commit: userParams.Commit,
+			Status: "pending",
+		})
+
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		log.Printf("#### %+v", userParams)
 		macaroon, _ := macaroon.New([]byte("lol"), "macarrão", "localhost:8080")
@@ -39,4 +51,25 @@ func main() {
 	})
 
 	http.ListenAndServe(":8080", router)
+}
+
+type DB struct {
+	session *mgo.Session
+	mongo   *mgo.Database
+}
+
+func NewDB() *DB {
+	session, err := mgo.Dial("localhost")
+	if err != nil {
+		panic(err)
+	}
+	return &DB{session, session.DB("db")}
+}
+
+func (db *DB) Save(collectionName string, data interface{}) error {
+	return db.mongo.C(collectionName).Insert(data)
+}
+
+func (db *DB) Close() {
+	db.session.Close()
 }
