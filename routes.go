@@ -101,16 +101,24 @@ func Register(router *httprouter.Router) {
 		json.NewDecoder(req.Body).Decode(form)
 		bytes, err := base64.URLEncoding.DecodeString(form.Token)
 		if err != nil {
-			base64.URLEncoding.DecodeString(form.Token)
+			r.JSON(w, 400, JSON{
+				"message": "Error deserializing macaroon.",
+				"error": err.Error(),
+			})
+			return
 		}
 
 		err = VerifyMacaroon(bytes)
 		if err != nil {
-			log.Panic(err)
+			r.JSON(w, 400, JSON{
+				"message": "Macaroon invalid.",
+				"error": err.Error(),
+			})
+			return
 		}
 
 		r.JSON(w, 200, JSON{
-			"message": "valid macarrão",
+			"message": "Macaroon valid.",
 		})
 	})
 }
