@@ -25,6 +25,10 @@ var (
 
 type JSON map[string]interface{}
 
+type MacaroonForm struct {
+	Token string "json:token"
+}
+
 func DeploymentFrom(req *http.Request) *models.Deployment {
 	deployment := &models.Deployment{}
 	json.NewDecoder(req.Body).Decode(deployment)
@@ -37,7 +41,7 @@ func CreateDeploymentMacaroon(deployment *models.Deployment) *macaroon.Macaroon 
 	macaroon, _ := macaroon.New([]byte("lol"), "macarrão", "localhost:8080")
 	macaroon.AddFirstPartyCaveat("requester:" + deployment.Requester)
 	macaroon.AddFirstPartyCaveat("commit:" + deployment.Commit)
-	macaroon.AddThirdPartyCaveat(ApproverKey, ApproverID, ApprovalURL)
+	//	macaroon.AddThirdPartyCaveat(ApproverKey, ApproverID, ApprovalURL)
 	return macaroon
 }
 
@@ -58,6 +62,19 @@ func RequestApproval(c appengine.Context, deployment *models.Deployment, macaroo
 	}
 }
 
+func VerifyMacaroon(serializedMacaroon []byte) error {
+	macaroon, _ := macaroon.New([]byte("lol"), "ss", "s")
+	err := macaroon.UnmarshalBinary(serializedMacaroon)
+	if err != nil {
+		return err
+	}
+
+	err = macaroon.Verify([]byte("lol"), CaveatCheck, nil)
+	return err
+}
+
+func CaveatCheck(d string) error { return nil }
+
 func Register(router *httprouter.Router) {
 	r := render.New()
 
@@ -72,8 +89,28 @@ func Register(router *httprouter.Router) {
 		}
 
 		b, _ := macaroon.MarshalBinary()
+		token := base64.URLEncoding.EncodeToString(b)
+
 		r.JSON(w, 200, JSON{
-			"token": base64.URLEncoding.EncodeToString(b),
+			"token": token,
+		})
+	})
+
+	router.POST("/validate", func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+		form := &MacaroonForm{}
+		json.NewDecoder(req.Body).Decode(form)
+		bytes, err := base64.URLEncoding.DecodeString(form.Token)
+		if err != nil {
+			base64.URLEncoding.DecodeString(form.Token)
+		}
+
+		err = VerifyMacaroon(bytes)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		r.JSON(w, 200, JSON{
+			"message": "valid macarrão",
 		})
 	})
 }
