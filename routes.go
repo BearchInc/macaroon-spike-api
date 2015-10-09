@@ -1,42 +1,57 @@
 package api
 
 import (
+	"appengine"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/bearchinc/macaroon-spike-api/database"
 	"github.com/bearchinc/macaroon-spike-api/models"
+	"github.com/drborges/appx"
 	"github.com/julienschmidt/httprouter"
 	"gopkg.in/macaroon.v1"
+	"gopkg.in/unrolled/render.v1"
 	"log"
 	"net/http"
 )
 
-func Register(router *httprouter.Router, db *database.Mongo) {
+var (
+	ApproverID  = "approver:ygor"
+	ApproverKey = []byte("Ygor's secret")
+	ApprovalURL = "http://localhost:6060/approvals?from=Ygor"
+)
+
+type JSON map[string]interface{}
+
+func DeploymentFrom(req *http.Request) *models.Deployment {
+	deployment := &models.Deployment{}
+	json.NewDecoder(req.Body).Decode(deployment)
+	deployment.Approver = ApproverID
+	deployment.Status = models.DeploymentAwaitingApproval
+	return deployment
+}
+
+func CreateDeploymentMacaroon(deployment *models.Deployment) *macaroon.Macaroon {
+	macaroon, _ := macaroon.New([]byte("lol"), "macarrão", "localhost:8080")
+	macaroon.AddFirstPartyCaveat("requester:" + deployment.Requester)
+	macaroon.AddFirstPartyCaveat("commit:" + deployment.Commit)
+	macaroon.AddThirdPartyCaveat(ApproverKey, ApproverID, ApprovalURL)
+	return macaroon
+}
+
+func Register(router *httprouter.Router) {
+	r := render.New()
+
 	router.POST("/deployments", func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		userParams := struct{ UserID, Commit string }{}
-		json.NewDecoder(req.Body).Decode(&userParams)
+		deployment := DeploymentFrom(req)
+		macaroon := CreateDeploymentMacaroon(deployment)
 
-		err := db.Save("deployments", &models.Deployment{
-			UserID: userParams.UserID,
-			Commit: userParams.Commit,
-			Status: models.DeploymentPending,
-		})
-
-		if err != nil {
-			log.Fatal(err)
+		db := appx.NewDatastore(appengine.NewContext(req))
+		if err := db.Save(deployment); err != nil {
+			log.Panic(err)
 		}
 
-		log.Printf("#### %+v", userParams)
-		macaroon, _ := macaroon.New([]byte("lol"), "macarrão", "localhost:8080")
-		macaroon.AddFirstPartyCaveat("user:" + userParams.UserID)
-		macaroon.AddFirstPartyCaveat("commit:" + userParams.Commit)
-
-		macaroon.AddThirdPartyCaveat([]byte("Ygor approval key"), "Ygor seal of approval", "http://localhost:6060/approvals?from=Ygor")
-
-		j, _ := macaroon.MarshalJSON()
 		b, _ := macaroon.MarshalBinary()
-		log.Println("####", string(j))
-		token := base64.URLEncoding.EncodeToString(b)
-		w.Write([]byte(token))
+		r.JSON(w, 200, JSON{
+			"token": base64.URLEncoding.EncodeToString(b),
+		})
 	})
 }

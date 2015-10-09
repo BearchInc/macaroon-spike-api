@@ -1,5 +1,7 @@
 package models
 
+import "github.com/drborges/appx"
+
 type DeploymentStatus string
 
 var (
@@ -10,8 +12,17 @@ var (
 )
 
 type Deployment struct {
-	Status      DeploymentStatus
-	UserID      string
-	Commit      string
-	ApproversID []string
+	appx.Model
+	Status       DeploymentStatus `json:"status"`
+	Commit       string           `json:"commit"`
+	Requester    string           `json:"requester"`
+	RequesterGCM string           `json:"gcm"`
+	Approver     string           `json:"approver"`
+}
+
+func (d *Deployment) KeySpec() *appx.KeySpec {
+	return &appx.KeySpec{
+		Kind:       "Deployments",
+		Incomplete: true,
+	}
 }
