@@ -2,8 +2,10 @@ package api
 
 import (
 	"appengine"
+	"appengine/urlfetch"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/bearchinc/macaroon-spike-api/gcm"
 	"github.com/bearchinc/macaroon-spike-api/models"
 	"github.com/drborges/appx"
 	"github.com/julienschmidt/httprouter"
@@ -14,7 +16,9 @@ import (
 )
 
 var (
+	GCMApiKey   = "AIzaSyD4jrcwQEsQrbHdhbkn22NWPH2tAByr-Jo"
 	ApproverID  = "approver:ygor"
+	ApproverGCM = "mR8qPvS7aQ0:APA91bFIlvG2e23PcrYvU-mJV7yIh-Gl3Re-Esjl0DLQxA6TYYxNWohaedos4v3Ed7JB31yb1ZBlb2je8YjWiffPraqe1GbrC3QZDLwqZvJmirfnDXCSv6RXeBYYjZIOi8SGnOBRcmu0"
 	ApproverKey = []byte("Ygor's secret")
 	ApprovalURL = "http://localhost:6060/approvals?from=Ygor"
 )
@@ -37,12 +41,30 @@ func CreateDeploymentMacaroon(deployment *models.Deployment) *macaroon.Macaroon 
 	return macaroon
 }
 
+func RequestApproval(c appengine.Context, deployment *models.Deployment, macaroon *macaroon.Macaroon) {
+	sender := gcm.NewSenderWithHttpClient("AIzaSyD4jrcwQEsQrbHdhbkn22NWPH2tAByr-Jo", urlfetch.Client(c))
+	// TODO handle response...
+	err := sender.Send(gcm.Message{
+		To:               "mR8qPvS7aQ0:APA91bFIlvG2e23PcrYvU-mJV7yIh-Gl3Re-Esjl0DLQxA6TYYxNWohaedos4v3Ed7JB31yb1ZBlb2je8YjWiffPraqe1GbrC3QZDLwqZvJmirfnDXCSv6RXeBYYjZIOi8SGnOBRcmu0",
+		ContentAvailable: true,
+		Notification: gcm.Params{
+			"title": "@Diego Borges",
+			"body":  "Big Lolzis it vorks!",
+		},
+	})
+
+	if err != nil {
+		log.Print(err)
+	}
+}
+
 func Register(router *httprouter.Router) {
 	r := render.New()
 
 	router.POST("/deployments", func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
 		deployment := DeploymentFrom(req)
 		macaroon := CreateDeploymentMacaroon(deployment)
+		RequestApproval(appengine.NewContext(req), deployment, macaroon)
 
 		db := appx.NewDatastore(appengine.NewContext(req))
 		if err := db.Save(deployment); err != nil {
